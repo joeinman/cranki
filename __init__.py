@@ -7,7 +7,7 @@ from datetime import datetime
 from typing import Optional, Dict, Any
 
 from aqt import mw, gui_hooks
-from aqt.qt import QTimer, QTimeEdit, QLabel, QCheckBox, QHBoxLayout, QWidget, QTime
+from aqt.qt import QTimer, QTimeEdit, QLabel, QCheckBox, QHBoxLayout, QWidget, QTime, QAction
 from aqt.utils import tooltip, showWarning
 
 
@@ -42,7 +42,11 @@ def set_deck_meta(did: int, updates: Dict[str, Any]) -> None:
     Update per-deck settings in addon config.
     Merges updates with existing settings.
     """
+    print(f"CrAnki: set_deck_meta called for deck {did} with updates: {updates}")
+    
     cfg = mw.addonManager.getConfig(__name__)
+    print(f"CrAnki: Current config before update: {cfg}")
+    
     if not cfg:
         cfg = {"per_deck": {}}
     
@@ -62,8 +66,13 @@ def set_deck_meta(did: int, updates: Dict[str, Any]) -> None:
     # Merge updates
     cfg["per_deck"][deck_key].update(updates)
     
+    print(f"CrAnki: Config after update: {cfg}")
+    print(f"CrAnki: Writing config using module name: {__name__}")
+    
     # Write back to config
     mw.addonManager.writeConfig(__name__, cfg)
+    
+    print(f"CrAnki: Config written successfully")
 
 
 def cleanup_missing_decks() -> None:
@@ -160,8 +169,29 @@ def add_cranki_controls_to_dialog(dialog, did: int) -> None:
         def on_checkbox_changed(state):
             time_edit.setEnabled(bool(state))
             time_label.setEnabled(bool(state))
+            # Auto-save when checkbox changes
+            enabled = checkbox.isChecked()
+            time = time_edit.time()
+            scheduled_time = time.toString("HH:mm")
+            set_deck_meta(did, {
+                "enabled": enabled,
+                "scheduled_time": scheduled_time
+            })
+            print(f"CrAnki: Auto-saved on checkbox change: enabled={enabled}")
+        
+        def on_time_changed():
+            # Auto-save when time changes
+            enabled = checkbox.isChecked()
+            time = time_edit.time()
+            scheduled_time = time.toString("HH:mm")
+            set_deck_meta(did, {
+                "enabled": enabled,
+                "scheduled_time": scheduled_time
+            })
+            print(f"CrAnki: Auto-saved on time change: time={scheduled_time}")
         
         checkbox.stateChanged.connect(on_checkbox_changed)
+        time_edit.timeChanged.connect(on_time_changed)
         
         # Store references on dialog
         dialog._cranki_enabled_cb = checkbox
@@ -449,7 +479,7 @@ def patch_filtered_deck_dialog() -> None:
                             print("CrAnki: Adding controls (delayed)...")
                             add_cranki_controls_to_dialog(dialog, did)
                             
-                            # Patch the accept method
+                            # Patch the accept method to save on Rebuild
                             if hasattr(dialog, 'accept'):
                                 original_accept = dialog.accept
                                 
@@ -512,27 +542,41 @@ def check_and_rebuild_decks() -> None:
         current_time = now.strftime("%H:%M")
         current_date = now.strftime("%Y-%m-%d")
         
+        print(f"CrAnki: Scheduler check at {current_time}")
+        
         # Load config
+        print(f"CrAnki: Loading config using module name: {__name__}")
         cfg = mw.addonManager.getConfig(__name__)
+        print(f"CrAnki: Config loaded: {cfg}")
+        
         if not cfg or "per_deck" not in cfg:
+            print("CrAnki: No config found or no per_deck key")
             return
         
         per_deck = cfg["per_deck"]
+        print(f"CrAnki: Checking {len(per_deck)} decks")
         
         # Check each deck
         for deck_key, settings in per_deck.items():
+            print(f"CrAnki: Deck {deck_key}: enabled={settings.get('enabled')}, scheduled={settings.get('scheduled_time')}, last_rebuild={settings.get('last_rebuild_date')}")
+            
             if not settings.get("enabled", False):
+                print(f"CrAnki: Deck {deck_key} not enabled, skipping")
                 continue
             
             scheduled_time = settings.get("scheduled_time", "00:00")
             last_rebuild_date = settings.get("last_rebuild_date", "")
             
-            # Check if it's time to rebuild
-            if scheduled_time != current_time:
+            # Check if already rebuilt today - if so, skip regardless of time
+            if last_rebuild_date == current_date:
+                print(f"CrAnki: Deck {deck_key} already rebuilt today ({current_date}), skipping")
                 continue
             
-            # Check if already rebuilt today
-            if last_rebuild_date == current_date:
+            # Check if it's time to rebuild (current time >= scheduled time)
+            if current_time >= scheduled_time:
+                print(f"CrAnki: Deck {deck_key}: current_time={current_time} >= scheduled_time={scheduled_time}, ready to rebuild!")
+            else:
+                print(f"CrAnki: Deck {deck_key}: current_time={current_time} < scheduled_time={scheduled_time}, not yet time")
                 continue
             
             # Rebuild this deck
@@ -550,12 +594,23 @@ def check_and_rebuild_decks() -> None:
                 
                 deck_name = deck.get('name', f'Deck {did}')
                 
+                print(f"CrAnki: Attempting to rebuild deck {did} ({deck_name})")
+                
+                # Capture variables for closures to avoid loop variable issues
+                _did = did
+                _deck_name = deck_name
+                _current_date = current_date
+                
                 # Define background worker
                 def rebuild_worker():
                     try:
-                        mw.col.rebuild_filtered_deck(did)
+                        # In modern Anki, use sched.rebuild_filtered_deck()
+                        mw.col.sched.rebuild_filtered_deck(_did)
                         return True, None
                     except Exception as e:
+                        print(f"CrAnki: Rebuild error: {e}")
+                        import traceback
+                        traceback.print_exc()
                         return False, str(e)
                 
                 # Define done callback
@@ -565,15 +620,20 @@ def check_and_rebuild_decks() -> None:
                         
                         if success:
                             # Update last rebuild date
-                            set_deck_meta(did, {"last_rebuild_date": current_date})
-                            tooltip(f"✓ Rebuilt filtered deck: {deck_name}")
+                            set_deck_meta(_did, {"last_rebuild_date": _current_date})
+                            tooltip(f"✓ Rebuilt filtered deck: {_deck_name}")
+                            
+                            # Refresh the deck browser to show updated card counts
+                            if hasattr(mw, 'deckBrowser') and mw.deckBrowser:
+                                mw.deckBrowser.refresh()
+                                print("CrAnki: Refreshed deck browser")
                         else:
                             showWarning(
-                                f"Failed to rebuild filtered deck '{deck_name}':\n{error}"
+                                f"Failed to rebuild filtered deck '{_deck_name}':\n{error}"
                             )
                     except Exception as e:
                         showWarning(
-                            f"Failed to rebuild filtered deck '{deck_name}':\n{str(e)}"
+                            f"Failed to rebuild filtered deck '{_deck_name}':\n{str(e)}"
                         )
                 
                 # Run in background
@@ -593,17 +653,47 @@ def check_and_rebuild_decks() -> None:
 def start_scheduler() -> None:
     """
     Start the scheduler timer when profile opens.
+    Syncs to check at the start of each minute.
     """
     global scheduler_timer
     
+    print("CrAnki: Starting scheduler...")
+    
     if scheduler_timer is not None:
+        print("CrAnki: Stopping existing scheduler...")
         scheduler_timer.stop()
         scheduler_timer.deleteLater()
     
+    # Calculate delay until next whole minute
+    from datetime import datetime
+    now = datetime.now()
+    seconds_until_next_minute = 60 - now.second
+    milliseconds_until_next_minute = seconds_until_next_minute * 1000 - now.microsecond // 1000
+    
+    print(f"CrAnki: Syncing to clock - will first check in {seconds_until_next_minute} seconds")
+    
+    # Use a one-shot timer to sync to the next minute
+    def start_regular_timer():
+        global scheduler_timer
+        
+        # Run the first check
+        check_and_rebuild_decks()
+        
+        # Now start the regular 60-second timer
+        scheduler_timer = QTimer()
+        scheduler_timer.setInterval(60000)  # 60 seconds
+        scheduler_timer.timeout.connect(check_and_rebuild_decks)
+        scheduler_timer.start()
+        
+        print(f"CrAnki: Regular scheduler started! Timer active: {scheduler_timer.isActive()}, interval: {scheduler_timer.interval()}ms")
+    
+    # Start with a single-shot timer to sync to the next minute
     scheduler_timer = QTimer()
-    scheduler_timer.setInterval(60000)  # 60 seconds
-    scheduler_timer.timeout.connect(check_and_rebuild_decks)
-    scheduler_timer.start()
+    scheduler_timer.setSingleShot(True)
+    scheduler_timer.timeout.connect(start_regular_timer)
+    scheduler_timer.start(milliseconds_until_next_minute)
+    
+    print("CrAnki: Scheduler will sync to next whole minute.")
 
 
 def stop_scheduler() -> None:
@@ -635,5 +725,24 @@ patch_filtered_deck_dialog()
 gui_hooks.profile_did_open.append(start_scheduler)
 gui_hooks.profile_will_close.append(stop_scheduler)
 gui_hooks.profile_will_close.append(cleanup_missing_decks)
+
+# Add menu action to manually test scheduler
+def add_debug_menu():
+    if not mw:
+        return
+    
+    action = QAction("CrAnki: Test Scheduler Now", mw)
+    action.triggered.connect(lambda: check_and_rebuild_decks())
+    mw.form.menuTools.addAction(action)
+    print("CrAnki: Added debug menu item to Tools menu")
+
+# Start scheduler immediately if profile is already open
+if mw and mw.col:
+    print("CrAnki: Profile already open, starting scheduler immediately...")
+    start_scheduler()
+    add_debug_menu()
+else:
+    print("CrAnki: Waiting for profile to open...")
+    gui_hooks.profile_did_open.append(add_debug_menu)
 
 print("CrAnki: Initialization complete")
