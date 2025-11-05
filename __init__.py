@@ -118,8 +118,8 @@ def add_cranki_controls_to_dialog(dialog, did: int) -> None:
         
         print(f"CrAnki: Creating UI controls for deck {did}")
         
-        # Create UI components - import all Qt widgets at once
-        from aqt.qt import QGroupBox, QVBoxLayout, QHBoxLayout, QScrollArea
+        # Create UI components
+        from aqt.qt import QGroupBox, QVBoxLayout, QHBoxLayout
         
         group_box = QGroupBox("Auto Rebuild")
         group_box.setStyleSheet("")  # Use default Anki styling
@@ -163,8 +163,6 @@ def add_cranki_controls_to_dialog(dialog, did: int) -> None:
         # Add some spacing at the bottom
         group_layout.addSpacing(5)
         
-        group_layout.addWidget(time_container)
-        
         # Connect checkbox to time_edit enabled state
         def on_checkbox_changed(state):
             time_edit.setEnabled(bool(state))
@@ -195,173 +193,23 @@ def add_cranki_controls_to_dialog(dialog, did: int) -> None:
         checkbox.stateChanged.connect(on_checkbox_changed)
         time_edit.timeChanged.connect(on_time_changed)
         
-        # Store references on dialog
-        dialog._cranki_enabled_cb = checkbox
-        dialog._cranki_time_edit = time_edit
-        dialog._cranki_deck_id = did
-        dialog._cranki_group_box = group_box
+        print("CrAnki: Widgets created, adding to dialog...")
         
-        print("CrAnki: Widgets created, attempting to add to dialog...")
-        
-        # Try to add to the dialog - multiple strategies
-        added = False
-        
-        # Strategy 0: Find the scroll area and insert into its widget's layout (most accurate)
-        if not added:
-            scroll_areas = dialog.findChildren(QScrollArea)
-            print(f"CrAnki: Found {len(scroll_areas)} scroll areas")
-            for i, scroll in enumerate(scroll_areas):
-                widget = scroll.widget()
-                if widget and hasattr(widget, 'layout') and callable(widget.layout):
-                    inner_layout = widget.layout()
-                    if inner_layout and hasattr(inner_layout, 'insertWidget'):
-                        try:
-                            # Insert near the end but before spacers/stretch
-                            count = inner_layout.count()
-                            print(f"CrAnki: Scroll area {i} inner layout has {count} items")
-                            
-                            # Try to insert before the last 1-2 items
-                            insert_pos = max(0, count - 1)
-                            inner_layout.insertWidget(insert_pos, group_box)
-                            added = True
-                            print(f"CrAnki: Inserted via scroll area {i} at position {insert_pos}")
-                            break
-                        except Exception as e:
-                            print(f"CrAnki: Failed scroll area {i}: {e}")
-        
-        # Strategy 1: Add to main layout (after Options section)
-        if not added and hasattr(dialog, 'layout') and callable(dialog.layout):
-            main_layout = dialog.layout()
-            if main_layout is not None and hasattr(main_layout, 'insertWidget'):
-                try:
-                    count = main_layout.count()
-                    print(f"CrAnki: Main layout has {count} items")
-                    
-                    # The layout typically has:
-                    # 0: Deck section
-                    # 1: Filter section  
-                    # 2: Options section
-                    # 3: Auto Rebuild (us!) <- Insert here
-                    # 4: Spacer/stretch items
-                    # 5: "Show excluded cards" link
-                    # 6: Button box
-                    # Insert at position 4 (right after Options section and before spacers)
-                    if count >= 5:
-                        insert_pos = 4
-                        main_layout.insertWidget(insert_pos, group_box)
-                        added = True
-                        print(f"CrAnki: Inserted via dialog.layout() at position {insert_pos}")
-                except Exception as e:
-                    print(f"CrAnki: Strategy 1 (insertWidget) failed: {e}")
-        
-        # Strategy 1b: Add to end if insert didn't work
-        if not added and hasattr(dialog, 'layout') and callable(dialog.layout):
-            main_layout = dialog.layout()
-            if main_layout is not None and hasattr(main_layout, 'addWidget'):
-                try:
-                    main_layout.addWidget(group_box)
-                    added = True
-                    print("CrAnki: Added via dialog.layout()")
-                except Exception as e:
-                    print(f"CrAnki: Strategy 1b failed: {e}")
-        
-        # Strategy 2: Add to form
-        if not added and hasattr(dialog, 'form'):
-            form = dialog.form
-            print(f"CrAnki: Found form, attributes: {[a for a in dir(form) if 'layout' in a.lower()]}")
-            for attr_name in dir(form):
-                if 'layout' in attr_name.lower():
-                    attr = getattr(form, attr_name, None)
-                    if attr and hasattr(attr, 'addWidget'):
-                        try:
-                            attr.addWidget(group_box)
-                            added = True
-                            print(f"CrAnki: Added via form.{attr_name}")
-                            break
-                        except Exception as e:
-                            print(f"CrAnki: Failed to add via form.{attr_name}: {e}")
-        
-        # Strategy 3: Find the main content widget
-        if not added:
-            print("CrAnki: Searching for layouts in widget tree...")
-            
-            # Look for scroll areas first (common in Anki dialogs)
-            scroll_areas = dialog.findChildren(QScrollArea)
-            for scroll in scroll_areas:
-                widget = scroll.widget()
-                if widget and hasattr(widget, 'layout') and callable(widget.layout):
-                    layout = widget.layout()
-                    if layout and hasattr(layout, 'addWidget'):
-                        try:
-                            layout.addWidget(group_box)
-                            added = True
-                            print("CrAnki: Added via QScrollArea widget")
-                            break
-                        except Exception as e:
-                            print(f"CrAnki: Failed scroll area: {e}")
-        
-        # Strategy 4: Find any suitable layout
-        if not added:
-            layouts = dialog.findChildren(QVBoxLayout)
-            print(f"CrAnki: Found {len(layouts)} QVBoxLayout instances")
-            for i, layout in enumerate(layouts):
-                try:
-                    layout.addWidget(group_box)
-                    added = True
-                    print(f"CrAnki: Added via QVBoxLayout #{i}")
-                    break
-                except Exception as e:
-                    print(f"CrAnki: Failed QVBoxLayout #{i}: {e}")
-        
-        # Strategy 5: Insert into first available QVBoxLayout with insertWidget
-        if not added:
-            layouts = dialog.findChildren(QVBoxLayout)
-            for i, layout in enumerate(layouts):
-                if layout.count() > 0:
-                    try:
-                        layout.insertWidget(layout.count(), group_box)
-                        added = True
-                        print(f"CrAnki: Inserted via QVBoxLayout #{i}")
-                        break
-                    except Exception as e:
-                        print(f"CrAnki: Failed insert QVBoxLayout #{i}: {e}")
-        
-        if added:
-            print(f"CrAnki: ✓ Successfully added controls to dialog for deck {did}")
-            # Force update
+        # Add to main layout at position 4 (after Options section, before spacers)
+        main_layout = dialog.layout()
+        if main_layout and hasattr(main_layout, 'insertWidget'):
+            count = main_layout.count()
+            print(f"CrAnki: Main layout has {count} items")
+            insert_pos = 4  # After Deck, Filter, and Options sections
+            main_layout.insertWidget(insert_pos, group_box)
+            print(f"CrAnki: ✓ Inserted at position {insert_pos}")
             group_box.show()
             dialog.adjustSize()
         else:
-            print("CrAnki: ✗ Could not find suitable layout to add controls")
-            print(f"CrAnki: Dialog type: {type(dialog)}")
-            print(f"CrAnki: Dialog has layout: {hasattr(dialog, 'layout')}")
-            print(f"CrAnki: Dialog has form: {hasattr(dialog, 'form')}")
+            print("CrAnki: ✗ Could not add controls - no suitable layout found")
         
     except Exception as e:
         print(f"CrAnki: Failed to add controls: {e}")
-        import traceback
-        traceback.print_exc()
-
-
-def save_cranki_settings(dialog) -> None:
-    """
-    Save CrAnki settings from dialog.
-    """
-    try:
-        if not hasattr(dialog, '_cranki_enabled_cb'):
-            return
-        
-        enabled = dialog._cranki_enabled_cb.isChecked()
-        time = dialog._cranki_time_edit.time()
-        scheduled_time = time.toString("HH:mm")
-        
-        set_deck_meta(dialog._cranki_deck_id, {
-            "enabled": enabled,
-            "scheduled_time": scheduled_time
-        })
-        print(f"CrAnki: Saved settings for deck {dialog._cranki_deck_id}: enabled={enabled}, time={scheduled_time}")
-    except Exception as e:
-        print(f"CrAnki: Failed to save settings: {e}")
         import traceback
         traceback.print_exc()
 
@@ -480,19 +328,6 @@ def patch_filtered_deck_dialog() -> None:
                         try:
                             print("CrAnki: Adding controls (delayed)...")
                             add_cranki_controls_to_dialog(dialog, did)
-                            
-                            # Patch the accept method to save on Rebuild
-                            if hasattr(dialog, 'accept'):
-                                original_accept = dialog.accept
-                                
-                                def patched_accept():
-                                    save_cranki_settings(dialog)
-                                    original_accept()
-                                
-                                dialog.accept = patched_accept
-                                print(f"CrAnki: Patched accept method for deck {did}")
-                            else:
-                                print("CrAnki: Warning - dialog has no accept method")
                         except Exception as e:
                             print(f"CrAnki: Error adding controls delayed: {e}")
                             import traceback
