@@ -112,8 +112,10 @@ def add_cranki_controls_to_dialog(dialog, did: int) -> None:
         # Create UI components - import all Qt widgets at once
         from aqt.qt import QGroupBox, QVBoxLayout, QHBoxLayout, QScrollArea
         
-        group_box = QGroupBox("CrAnki - Auto Rebuild")
+        group_box = QGroupBox("Auto Rebuild")
+        group_box.setStyleSheet("")  # Use default Anki styling
         group_layout = QVBoxLayout()
+        group_layout.setContentsMargins(10, 15, 10, 10)  # Match Anki's group box margins
         group_box.setLayout(group_layout)
         
         # Checkbox for enabling auto-rebuild
@@ -121,18 +123,21 @@ def add_cranki_controls_to_dialog(dialog, did: int) -> None:
         checkbox.setChecked(meta["enabled"])
         group_layout.addWidget(checkbox)
         
-        # Time picker container
+        # Time picker container with proper spacing
         time_container = QWidget()
         time_layout = QHBoxLayout()
-        time_layout.setContentsMargins(0, 0, 0, 0)
+        time_layout.setContentsMargins(20, 5, 0, 5)  # Add left margin for indentation
+        time_layout.setSpacing(10)  # Add spacing between widgets
         time_container.setLayout(time_layout)
         
         time_label = QLabel("Rebuild at:")
+        time_label.setMinimumWidth(80)  # Ensure label has consistent width
         time_layout.addWidget(time_label)
         
         time_edit = QTimeEdit()
         time_edit.setDisplayFormat("HH:mm")
         time_edit.setEnabled(meta["enabled"])
+        time_edit.setMinimumWidth(100)  # Make time picker wider
         
         # Parse and set time
         try:
@@ -142,7 +147,12 @@ def add_cranki_controls_to_dialog(dialog, did: int) -> None:
             time_edit.setTime(QTime(0, 0))
         
         time_layout.addWidget(time_edit)
-        time_layout.addStretch()
+        time_layout.addStretch()  # Push everything to the left
+        
+        group_layout.addWidget(time_container)
+        
+        # Add some spacing at the bottom
+        group_layout.addSpacing(5)
         
         group_layout.addWidget(time_container)
         
@@ -164,7 +174,55 @@ def add_cranki_controls_to_dialog(dialog, did: int) -> None:
         # Try to add to the dialog - multiple strategies
         added = False
         
-        # Strategy 1: Add to main layout
+        # Strategy 0: Find the scroll area and insert into its widget's layout (most accurate)
+        if not added:
+            scroll_areas = dialog.findChildren(QScrollArea)
+            print(f"CrAnki: Found {len(scroll_areas)} scroll areas")
+            for i, scroll in enumerate(scroll_areas):
+                widget = scroll.widget()
+                if widget and hasattr(widget, 'layout') and callable(widget.layout):
+                    inner_layout = widget.layout()
+                    if inner_layout and hasattr(inner_layout, 'insertWidget'):
+                        try:
+                            # Insert near the end but before spacers/stretch
+                            count = inner_layout.count()
+                            print(f"CrAnki: Scroll area {i} inner layout has {count} items")
+                            
+                            # Try to insert before the last 1-2 items
+                            insert_pos = max(0, count - 1)
+                            inner_layout.insertWidget(insert_pos, group_box)
+                            added = True
+                            print(f"CrAnki: Inserted via scroll area {i} at position {insert_pos}")
+                            break
+                        except Exception as e:
+                            print(f"CrAnki: Failed scroll area {i}: {e}")
+        
+        # Strategy 1: Add to main layout (after Options section)
+        if not added and hasattr(dialog, 'layout') and callable(dialog.layout):
+            main_layout = dialog.layout()
+            if main_layout is not None and hasattr(main_layout, 'insertWidget'):
+                try:
+                    count = main_layout.count()
+                    print(f"CrAnki: Main layout has {count} items")
+                    
+                    # The layout typically has:
+                    # 0: Deck section
+                    # 1: Filter section  
+                    # 2: Options section
+                    # 3: Auto Rebuild (us!) <- Insert here
+                    # 4: Spacer/stretch items
+                    # 5: "Show excluded cards" link
+                    # 6: Button box
+                    # Insert at position 4 (right after Options section and before spacers)
+                    if count >= 5:
+                        insert_pos = 4
+                        main_layout.insertWidget(insert_pos, group_box)
+                        added = True
+                        print(f"CrAnki: Inserted via dialog.layout() at position {insert_pos}")
+                except Exception as e:
+                    print(f"CrAnki: Strategy 1 (insertWidget) failed: {e}")
+        
+        # Strategy 1b: Add to end if insert didn't work
         if not added and hasattr(dialog, 'layout') and callable(dialog.layout):
             main_layout = dialog.layout()
             if main_layout is not None and hasattr(main_layout, 'addWidget'):
@@ -173,7 +231,7 @@ def add_cranki_controls_to_dialog(dialog, did: int) -> None:
                     added = True
                     print("CrAnki: Added via dialog.layout()")
                 except Exception as e:
-                    print(f"CrAnki: Strategy 1 failed: {e}")
+                    print(f"CrAnki: Strategy 1b failed: {e}")
         
         # Strategy 2: Add to form
         if not added and hasattr(dialog, 'form'):
