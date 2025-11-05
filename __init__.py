@@ -16,6 +16,23 @@ from aqt.utils import tooltip, showWarning
 
 
 # =============================================================================
+# Debug Logging
+# =============================================================================
+
+def debug_log(message: str) -> None:
+    """
+    Print debug message only if debug mode is enabled.
+    """
+    try:
+        cfg = mw.addonManager.getConfig(__name__)
+        if cfg and cfg.get("debug_mode", False):
+            debug_log(f"{message}")
+    except:
+        # If we can't check config, don't log
+        pass
+
+
+# =============================================================================
 # Config Helper Functions
 # =============================================================================
 
@@ -46,10 +63,10 @@ def set_deck_meta(did: int, updates: Dict[str, Any]) -> None:
     Update per-deck settings in addon config.
     Merges updates with existing settings.
     """
-    print(f"CrAnki: set_deck_meta called for deck {did} with updates: {updates}")
+    debug_log(f"set_deck_meta called for deck {did} with updates: {updates}")
     
     cfg = mw.addonManager.getConfig(__name__)
-    print(f"CrAnki: Current config before update: {cfg}")
+    debug_log(f"Current config before update: {cfg}")
     
     if not cfg:
         cfg = {"per_deck": {}}
@@ -70,13 +87,13 @@ def set_deck_meta(did: int, updates: Dict[str, Any]) -> None:
     # Merge updates
     cfg["per_deck"][deck_key].update(updates)
     
-    print(f"CrAnki: Config after update: {cfg}")
-    print(f"CrAnki: Writing config using module name: {__name__}")
+    debug_log(f"Config after update: {cfg}")
+    debug_log(f"Writing config using module name: {__name__}")
     
     # Write back to config
     mw.addonManager.writeConfig(__name__, cfg)
     
-    print(f"CrAnki: Config written successfully")
+    debug_log(f"Config written successfully")
 
 
 def cleanup_missing_decks() -> None:
@@ -120,7 +137,7 @@ def add_cranki_controls_to_dialog(dialog, did: int) -> None:
         # Load current settings
         meta = get_deck_meta(did)
         
-        print(f"CrAnki: Creating UI controls for deck {did}")
+        debug_log(f"Creating UI controls for deck {did}")
         
         group_box = QGroupBox("Auto Rebuild")
         group_box.setStyleSheet("")  # Use default Anki styling
@@ -176,7 +193,7 @@ def add_cranki_controls_to_dialog(dialog, did: int) -> None:
                 "enabled": enabled,
                 "scheduled_time": scheduled_time
             })
-            print(f"CrAnki: Auto-saved on checkbox change: enabled={enabled}")
+            debug_log(f"Auto-saved on checkbox change: enabled={enabled}")
         
         def on_time_changed():
             # Auto-save when time changes
@@ -189,28 +206,28 @@ def add_cranki_controls_to_dialog(dialog, did: int) -> None:
                 "scheduled_time": scheduled_time,
                 "last_rebuild_date": ""  # Clear so it can rebuild at new time
             })
-            print(f"CrAnki: Auto-saved on time change: time={scheduled_time}, cleared last rebuild date")
+            debug_log(f"Auto-saved on time change: time={scheduled_time}, cleared last rebuild date")
         
         checkbox.stateChanged.connect(on_checkbox_changed)
         time_edit.timeChanged.connect(on_time_changed)
         
-        print("CrAnki: Widgets created, adding to dialog...")
+        debug_log("Widgets created, adding to dialog...")
         
         # Add to main layout at position 4 (after Options section, before spacers)
         main_layout = dialog.layout()
         if main_layout and hasattr(main_layout, 'insertWidget'):
             count = main_layout.count()
-            print(f"CrAnki: Main layout has {count} items")
+            debug_log(f"Main layout has {count} items")
             insert_pos = 4  # After Deck, Filter, and Options sections
             main_layout.insertWidget(insert_pos, group_box)
-            print(f"CrAnki: ✓ Inserted at position {insert_pos}")
+            debug_log(f"✓ Inserted at position {insert_pos}")
             group_box.show()
             dialog.adjustSize()
         else:
-            print("CrAnki: ✗ Could not add controls - no suitable layout found")
+            debug_log("✗ Could not add controls - no suitable layout found")
         
     except Exception as e:
-        print(f"CrAnki: Failed to add controls: {e}")
+        debug_log(f"Failed to add controls: {e}")
         import traceback
         traceback.print_exc()
 
@@ -225,7 +242,7 @@ def patch_filtered_deck_dialog() -> None:
     
     # Patch the class __init__ FIRST before any hooks
     try:
-        print("CrAnki: Patching FilteredDeckConfigDialog.__init__")
+        debug_log("Patching FilteredDeckConfigDialog.__init__")
         
         # Store original __init__
         original_init = FilteredDeckConfigDialog.__init__
@@ -234,13 +251,13 @@ def patch_filtered_deck_dialog() -> None:
             # Capture deck_id before calling original init
             deck_id = kwargs.get('deck_id')
             
-            print(f"CrAnki: __init__ called with args={args}, kwargs={kwargs}")
+            debug_log(f"__init__ called with args={args}, kwargs={kwargs}")
             
             if deck_id is not None:
                 _dialog_deck_ids[id(self)] = deck_id
-                print(f"CrAnki: Captured deck_id from kwargs: {deck_id}")
+                debug_log(f"Captured deck_id from kwargs: {deck_id}")
             else:
-                print("CrAnki: No deck_id in kwargs")
+                debug_log("No deck_id in kwargs")
             
             # Call original initialization
             result = original_init(self, *args, **kwargs)
@@ -251,20 +268,20 @@ def patch_filtered_deck_dialog() -> None:
                     val = getattr(self, attr)
                     if isinstance(val, int) and val not in _dialog_deck_ids.values():
                         _dialog_deck_ids[id(self)] = val
-                        print(f"CrAnki: Captured deck_id from attribute {attr}: {val}")
+                        debug_log(f"Captured deck_id from attribute {attr}: {val}")
                         break
             
             return result
         
         # Apply patch
         FilteredDeckConfigDialog.__init__ = patched_init
-        print("CrAnki: Successfully patched FilteredDeckConfigDialog.__init__")
+        debug_log("Successfully patched FilteredDeckConfigDialog.__init__")
         
     except ImportError as e:
-        print(f"CrAnki: Could not import FilteredDeckConfigDialog: {e}")
+        debug_log(f"Could not import FilteredDeckConfigDialog: {e}")
         return
     except Exception as e:
-        print(f"CrAnki: Error patching __init__: {e}")
+        debug_log(f"Error patching __init__: {e}")
         import traceback
         traceback.print_exc()
         return
@@ -281,17 +298,17 @@ def patch_filtered_deck_dialog() -> None:
                     dialog = dialog_instance
                     dialog_type = type(dialog).__name__
                     
-                    print(f"CrAnki: Detected filtered deck dialog (type: {dialog_type})")
-                    print(f"CrAnki: Dialog manager type: {type(dialog_manager)}")
+                    debug_log(f"Detected filtered deck dialog (type: {dialog_type})")
+                    debug_log(f"Dialog manager type: {type(dialog_manager)}")
                     
                     # The deck_id should have been stored during __init__
                     # Let's check if we stored it
                     did = _dialog_deck_ids.get(id(dialog))
                     
                     if did is not None:
-                        print(f"CrAnki: Found deck_id from init interception: {did}")
+                        debug_log(f"Found deck_id from init interception: {did}")
                     else:
-                        print("CrAnki: deck_id not found in init interception")
+                        debug_log("deck_id not found in init interception")
                         # Fall back to heuristic
                         filtered_decks = []
                         for deck in mw.col.decks.all_names_and_ids():
@@ -301,30 +318,30 @@ def patch_filtered_deck_dialog() -> None:
                         
                         if len(filtered_decks) == 1:
                             did = filtered_decks[0]
-                            print(f"CrAnki: Only one filtered deck found, using: {did}")
+                            debug_log(f"Only one filtered deck found, using: {did}")
                         else:
-                            print(f"CrAnki: Found {len(filtered_decks)} filtered decks, cannot determine which one")
+                            debug_log(f"Found {len(filtered_decks)} filtered decks, cannot determine which one")
                             return
                     
                     # Verify it's a filtered deck
                     deck = mw.col.decks.get(did, default=False)
                     if not deck:
-                        print(f"CrAnki: Deck {did} not found")
+                        debug_log(f"Deck {did} not found")
                         return
                     
                     if not deck.get('dyn', False):
-                        print(f"CrAnki: Deck {did} is not a filtered deck")
+                        debug_log(f"Deck {did} is not a filtered deck")
                         return
                     
-                    print(f"CrAnki: Processing filtered deck {did} - {deck.get('name', 'Unknown')}")
+                    debug_log(f"Processing filtered deck {did} - {deck.get('name', 'Unknown')}")
                     
                     # Use QTimer to add controls after dialog is fully initialized
                     def add_controls_delayed():
                         try:
-                            print("CrAnki: Adding controls (delayed)...")
+                            debug_log("Adding controls (delayed)...")
                             add_cranki_controls_to_dialog(dialog, did)
                         except Exception as e:
-                            print(f"CrAnki: Error adding controls delayed: {e}")
+                            debug_log(f"Error adding controls delayed: {e}")
                             import traceback
                             traceback.print_exc()
                     
@@ -332,23 +349,23 @@ def patch_filtered_deck_dialog() -> None:
                     QTimer.singleShot(100, add_controls_delayed)
                     
                 except Exception as e:
-                    print(f"CrAnki: Error in dialog hook: {e}")
+                    debug_log(f"Error in dialog hook: {e}")
                     import traceback
                     traceback.print_exc()
             
             # Register hook
             if hasattr(gui_hooks, 'dialog_manager_did_open_dialog'):
                 gui_hooks.dialog_manager_did_open_dialog.append(on_dialog_open)
-                print("CrAnki: Registered dialog hook (dialog_manager_did_open_dialog)")
+                debug_log("Registered dialog hook (dialog_manager_did_open_dialog)")
             else:
-                print("CrAnki: dialog_manager_did_open_dialog hook not available")
+                debug_log("dialog_manager_did_open_dialog hook not available")
         except Exception as e:
-            print(f"CrAnki: Hook registration failed: {e}")
+            debug_log(f"Hook registration failed: {e}")
             import traceback
             traceback.print_exc()
         
     except Exception as e:
-        print(f"CrAnki: Failed to patch filtered deck dialog: {e}")
+        debug_log(f"Failed to patch filtered deck dialog: {e}")
         import traceback
         traceback.print_exc()
 
@@ -374,26 +391,26 @@ def check_and_rebuild_decks() -> None:
         current_time = now.strftime("%H:%M")
         current_date = now.strftime("%Y-%m-%d")
         
-        print(f"CrAnki: Scheduler check at {current_time}")
+        debug_log(f"Scheduler check at {current_time}")
         
         # Load config
-        print(f"CrAnki: Loading config using module name: {__name__}")
+        debug_log(f"Loading config using module name: {__name__}")
         cfg = mw.addonManager.getConfig(__name__)
-        print(f"CrAnki: Config loaded: {cfg}")
+        debug_log(f"Config loaded: {cfg}")
         
         if not cfg or "per_deck" not in cfg:
-            print("CrAnki: No config found or no per_deck key")
+            debug_log("No config found or no per_deck key")
             return
         
         per_deck = cfg["per_deck"]
-        print(f"CrAnki: Checking {len(per_deck)} decks")
+        debug_log(f"Checking {len(per_deck)} decks")
         
         # Check each deck
         for deck_key, settings in per_deck.items():
-            print(f"CrAnki: Deck {deck_key}: enabled={settings.get('enabled')}, scheduled={settings.get('scheduled_time')}, last_rebuild={settings.get('last_rebuild_date')}")
+            debug_log(f"Deck {deck_key}: enabled={settings.get('enabled')}, scheduled={settings.get('scheduled_time')}, last_rebuild={settings.get('last_rebuild_date')}")
             
             if not settings.get("enabled", False):
-                print(f"CrAnki: Deck {deck_key} not enabled, skipping")
+                debug_log(f"Deck {deck_key} not enabled, skipping")
                 continue
             
             scheduled_time = settings.get("scheduled_time", "00:00")
@@ -401,14 +418,14 @@ def check_and_rebuild_decks() -> None:
             
             # Check if already rebuilt today - if so, skip regardless of time
             if last_rebuild_date == current_date:
-                print(f"CrAnki: Deck {deck_key} already rebuilt today ({current_date}), skipping")
+                debug_log(f"Deck {deck_key} already rebuilt today ({current_date}), skipping")
                 continue
             
             # Check if it's time to rebuild (current time >= scheduled time)
             if current_time >= scheduled_time:
-                print(f"CrAnki: Deck {deck_key}: current_time={current_time} >= scheduled_time={scheduled_time}, ready to rebuild!")
+                debug_log(f"Deck {deck_key}: current_time={current_time} >= scheduled_time={scheduled_time}, ready to rebuild!")
             else:
-                print(f"CrAnki: Deck {deck_key}: current_time={current_time} < scheduled_time={scheduled_time}, not yet time")
+                debug_log(f"Deck {deck_key}: current_time={current_time} < scheduled_time={scheduled_time}, not yet time")
                 continue
             
             # Rebuild this deck
@@ -426,7 +443,7 @@ def check_and_rebuild_decks() -> None:
                 
                 deck_name = deck.get('name', f'Deck {did}')
                 
-                print(f"CrAnki: Attempting to rebuild deck {did} ({deck_name})")
+                debug_log(f"Attempting to rebuild deck {did} ({deck_name})")
                 
                 # Capture variables for closures to avoid loop variable issues
                 _did = did
@@ -440,7 +457,7 @@ def check_and_rebuild_decks() -> None:
                         mw.col.sched.rebuild_filtered_deck(_did)
                         return True, None
                     except Exception as e:
-                        print(f"CrAnki: Rebuild error: {e}")
+                        debug_log(f"Rebuild error: {e}")
                         import traceback
                         traceback.print_exc()
                         return False, str(e)
@@ -458,7 +475,7 @@ def check_and_rebuild_decks() -> None:
                             # Refresh the deck browser to show updated card counts
                             if hasattr(mw, 'deckBrowser') and mw.deckBrowser:
                                 mw.deckBrowser.refresh()
-                                print("CrAnki: Refreshed deck browser")
+                                debug_log("Refreshed deck browser")
                         else:
                             showWarning(
                                 f"Failed to rebuild filtered deck '{_deck_name}':\n{error}"
@@ -475,11 +492,11 @@ def check_and_rebuild_decks() -> None:
                 # Invalid deck ID in config
                 continue
             except Exception as e:
-                print(f"CrAnki: Error rebuilding deck {deck_key}: {e}")
+                debug_log(f"Error rebuilding deck {deck_key}: {e}")
                 continue
     
     except Exception as e:
-        print(f"CrAnki: Error in check_and_rebuild_decks: {e}")
+        debug_log(f"Error in check_and_rebuild_decks: {e}")
 
 
 def start_scheduler() -> None:
@@ -489,10 +506,10 @@ def start_scheduler() -> None:
     """
     global scheduler_timer
     
-    print("CrAnki: Starting scheduler...")
+    debug_log("Starting scheduler...")
     
     if scheduler_timer is not None:
-        print("CrAnki: Stopping existing scheduler...")
+        debug_log("Stopping existing scheduler...")
         scheduler_timer.stop()
         scheduler_timer.deleteLater()
     
@@ -501,7 +518,7 @@ def start_scheduler() -> None:
     seconds_until_next_minute = 60 - now.second
     milliseconds_until_next_minute = seconds_until_next_minute * 1000 - now.microsecond // 1000
     
-    print(f"CrAnki: Syncing to clock - will first check in {seconds_until_next_minute} seconds")
+    debug_log(f"Syncing to clock - will first check in {seconds_until_next_minute} seconds")
     
     # Use a one-shot timer to sync to the next minute
     def start_regular_timer():
@@ -516,7 +533,7 @@ def start_scheduler() -> None:
         scheduler_timer.timeout.connect(check_and_rebuild_decks)
         scheduler_timer.start()
         
-        print(f"CrAnki: Regular scheduler started! Timer active: {scheduler_timer.isActive()}, interval: {scheduler_timer.interval()}ms")
+        debug_log(f"Regular scheduler started! Timer active: {scheduler_timer.isActive()}, interval: {scheduler_timer.interval()}ms")
     
     # Start with a single-shot timer to sync to the next minute
     scheduler_timer = QTimer()
@@ -524,7 +541,7 @@ def start_scheduler() -> None:
     scheduler_timer.timeout.connect(start_regular_timer)
     scheduler_timer.start(milliseconds_until_next_minute)
     
-    print("CrAnki: Scheduler will sync to next whole minute.")
+    debug_log("Scheduler will sync to next whole minute.")
 
 
 def stop_scheduler() -> None:
@@ -543,11 +560,16 @@ def stop_scheduler() -> None:
 # Initialization
 # =============================================================================
 
-print("="*60)
-print("CrAnki - Auto Rebuild Filtered Decks")
-print("Version: 1.0")
-print("Initializing addon...")
-print("="*60)
+# Always show addon loaded message
+cfg = mw.addonManager.getConfig(__name__) if mw else None
+if cfg and cfg.get("debug_mode", False):
+    print("="*60)
+    print("CrAnki - Auto Rebuild Filtered Decks")
+    print("Version: 1.0")
+    print("Debug mode: ENABLED")
+    print("="*60)
+else:
+    print("CrAnki: Addon loaded (debug mode: OFF, enable in Tools > Add-ons > Config)")
 
 # Patch the filtered deck dialog
 patch_filtered_deck_dialog()
@@ -565,15 +587,15 @@ def add_debug_menu():
     action = QAction("CrAnki: Test Scheduler Now", mw)
     action.triggered.connect(lambda: check_and_rebuild_decks())
     mw.form.menuTools.addAction(action)
-    print("CrAnki: Added debug menu item to Tools menu")
+    debug_log("Added debug menu item to Tools menu")
 
 # Start scheduler immediately if profile is already open
 if mw and mw.col:
-    print("CrAnki: Profile already open, starting scheduler immediately...")
+    debug_log("Profile already open, starting scheduler immediately...")
     start_scheduler()
     add_debug_menu()
 else:
-    print("CrAnki: Waiting for profile to open...")
+    debug_log("Waiting for profile to open...")
     gui_hooks.profile_did_open.append(add_debug_menu)
 
-print("CrAnki: Initialization complete")
+debug_log("Initialization complete")
