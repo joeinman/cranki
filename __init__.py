@@ -7,7 +7,11 @@ from datetime import datetime
 from typing import Optional, Dict, Any
 
 from aqt import mw, gui_hooks
-from aqt.qt import QTimer, QTimeEdit, QLabel, QCheckBox, QHBoxLayout, QWidget, QTime, QAction
+from aqt.filtered_deck import FilteredDeckConfigDialog
+from aqt.qt import (
+    QTimer, QTimeEdit, QLabel, QCheckBox, QHBoxLayout, QWidget, QTime, QAction,
+    QGroupBox, QVBoxLayout
+)
 from aqt.utils import tooltip, showWarning
 
 
@@ -118,9 +122,6 @@ def add_cranki_controls_to_dialog(dialog, did: int) -> None:
         
         print(f"CrAnki: Creating UI controls for deck {did}")
         
-        # Create UI components
-        from aqt.qt import QGroupBox, QVBoxLayout, QHBoxLayout
-        
         group_box = QGroupBox("Auto Rebuild")
         group_box.setStyleSheet("")  # Use default Anki styling
         group_layout = QVBoxLayout()
@@ -224,8 +225,6 @@ def patch_filtered_deck_dialog() -> None:
     
     # Patch the class __init__ FIRST before any hooks
     try:
-        from aqt.filtered_deck import FilteredDeckConfigDialog
-        
         print("CrAnki: Patching FilteredDeckConfigDialog.__init__")
         
         # Store original __init__
@@ -273,8 +272,6 @@ def patch_filtered_deck_dialog() -> None:
     try:
         # Now set up hook-based approach (Anki 2.1.50+)
         try:
-            from aqt import gui_hooks as hooks
-            
             def on_dialog_open(dialog_manager, dialog_name: str, dialog_instance):
                 try:
                     # Only process FilteredDeckConfigDialog
@@ -322,8 +319,6 @@ def patch_filtered_deck_dialog() -> None:
                     print(f"CrAnki: Processing filtered deck {did} - {deck.get('name', 'Unknown')}")
                     
                     # Use QTimer to add controls after dialog is fully initialized
-                    from aqt.qt import QTimer
-                    
                     def add_controls_delayed():
                         try:
                             print("CrAnki: Adding controls (delayed)...")
@@ -342,8 +337,8 @@ def patch_filtered_deck_dialog() -> None:
                     traceback.print_exc()
             
             # Register hook
-            if hasattr(hooks, 'dialog_manager_did_open_dialog'):
-                hooks.dialog_manager_did_open_dialog.append(on_dialog_open)
+            if hasattr(gui_hooks, 'dialog_manager_did_open_dialog'):
+                gui_hooks.dialog_manager_did_open_dialog.append(on_dialog_open)
                 print("CrAnki: Registered dialog hook (dialog_manager_did_open_dialog)")
             else:
                 print("CrAnki: dialog_manager_did_open_dialog hook not available")
@@ -502,7 +497,6 @@ def start_scheduler() -> None:
         scheduler_timer.deleteLater()
     
     # Calculate delay until next whole minute
-    from datetime import datetime
     now = datetime.now()
     seconds_until_next_minute = 60 - now.second
     milliseconds_until_next_minute = seconds_until_next_minute * 1000 - now.microsecond // 1000
