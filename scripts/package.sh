@@ -22,10 +22,11 @@ pushd "$ROOT_DIR" >/dev/null
 zip -r -9 "$PACKAGE_PATH" \
     manifest.json \
     __init__.py \
+    src/ \
     config.json \
     README.md \
     LICENSE \
-    -x "__pycache__/*" > /dev/null
+    -x "__pycache__/*" -x "src/__pycache__/*" > /dev/null
 
 popd >/dev/null
 

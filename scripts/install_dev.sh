@@ -44,10 +44,15 @@ fi
 
 # Copy addon files
 echo "📦 Installing addon..."
-cp -r "$(dirname "$0")" "$TARGET_DIR"
+mkdir -p "$TARGET_DIR"
+cp -r "$(dirname "$0")/../"__init__.py "$TARGET_DIR/"
+cp -r "$(dirname "$0")/../src" "$TARGET_DIR/"
+cp "$(dirname "$0")/../manifest.json" "$TARGET_DIR/"
+cp "$(dirname "$0")/../config.json" "$TARGET_DIR/"
 
-# Remove the install script from the target
+# Remove the install script from the target if it exists
 rm -f "$TARGET_DIR/install_dev.sh"
+rm -rf "$TARGET_DIR/scripts"
 
 # Restore config if we backed it up
 if [ -n "$CONFIG_BACKUP" ] && [ -f "$CONFIG_BACKUP" ]; then
