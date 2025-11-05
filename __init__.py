@@ -181,14 +181,16 @@ def add_cranki_controls_to_dialog(dialog, did: int) -> None:
         
         def on_time_changed():
             # Auto-save when time changes
+            # Clear last rebuild date so it can rebuild at the new time
             enabled = checkbox.isChecked()
             time = time_edit.time()
             scheduled_time = time.toString("HH:mm")
             set_deck_meta(did, {
                 "enabled": enabled,
-                "scheduled_time": scheduled_time
+                "scheduled_time": scheduled_time,
+                "last_rebuild_date": ""  # Clear so it can rebuild at new time
             })
-            print(f"CrAnki: Auto-saved on time change: time={scheduled_time}")
+            print(f"CrAnki: Auto-saved on time change: time={scheduled_time}, cleared last rebuild date")
         
         checkbox.stateChanged.connect(on_checkbox_changed)
         time_edit.timeChanged.connect(on_time_changed)
