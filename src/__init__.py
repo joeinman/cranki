@@ -6,6 +6,6 @@
 #
 # This file is part of the CrAnki Addon for Anki.
 
-from . import cranki
+from . import main
 
-__all__ = ["cranki"]
+__all__ = ["main"]
