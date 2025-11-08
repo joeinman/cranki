@@ -1,11 +1,13 @@
-"""Configuration helpers for CrAnki."""
+"""Configuration helpers that use Anki's collection/profile storage."""
 
+from copy import deepcopy
 from typing import Any, Dict, Optional
 
 from aqt import mw
 
-from .main import debug_log
 
+CONFIG_KEY = "cranki"
+ADDON_PACKAGE = __name__.split(".src.", 1)[0] if ".src." in __name__ else __name__
 
 DEFAULT_DECK_META: Dict[str, Any] = {
     "enabled": False,
@@ -13,58 +15,126 @@ DEFAULT_DECK_META: Dict[str, Any] = {
     "last_rebuild_date": "",
 }
 
+DEFAULT_CONFIG: Dict[str, Any] = {
+    "debug_mode": False,
+    "per_deck": {},
+}
 
-def _ensure_config(module_name: str) -> Dict[str, Any]:
-    cfg = mw.addonManager.getConfig(module_name) if mw else None
-    if not cfg:
-        cfg = {"per_deck": {}}
-    elif "per_deck" not in cfg:
-        cfg["per_deck"] = {}
+
+def _collection():
+    return getattr(mw, "col", None)
+
+
+def _load_legacy_config() -> Optional[Dict[str, Any]]:
+    manager = getattr(mw, "addonManager", None)
+    if not manager:
+        return None
+    for key in {ADDON_PACKAGE, __name__}:
+        try:
+            data = manager.getConfig(key)
+            if data:
+                return data
+        except Exception:
+            continue
+    return None
+
+
+def _normalize_config(raw: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    cfg = deepcopy(DEFAULT_CONFIG)
+    if isinstance(raw, dict):
+        cfg["debug_mode"] = bool(raw.get("debug_mode", False))
+        per_deck = raw.get("per_deck", {})
+        if isinstance(per_deck, dict):
+            for key, value in per_deck.items():
+                entry = DEFAULT_DECK_META.copy()
+                if isinstance(value, dict):
+                    entry.update(value)
+                cfg["per_deck"][str(key)] = entry
     return cfg
 
 
-def get_deck_meta(
-    did: int,
-    module_name: str = __name__,
-    cfg: Optional[Dict[str, Any]] = None,
-) -> Dict[str, Any]:
-    """Return stored metadata for a deck or defaults if missing."""
-    data = cfg if cfg is not None else _ensure_config(module_name)
-    deck_key = str(did)
-    return data.get("per_deck", {}).get(deck_key, DEFAULT_DECK_META.copy())
+def load_config() -> Dict[str, Any]:
+    col = _collection()
+    if not col:
+        return deepcopy(DEFAULT_CONFIG)
+    getter = getattr(col, "get_config", None)
+    raw = getter(CONFIG_KEY) if callable(getter) else col.conf.get(CONFIG_KEY)
+    if not isinstance(raw, dict) or not raw:
+        legacy = _load_legacy_config()
+        if legacy:
+            normalized = _normalize_config(legacy)
+            save_config(normalized)
+            return normalized
+    return _normalize_config(raw)
 
 
-def set_deck_meta(did: int, updates: Dict[str, Any], module_name: str = __name__) -> None:
-    """Merge updates into the stored deck metadata."""
-    debug_log(
-        f"set_deck_meta called for deck {did} with updates: {updates} (module={module_name})"
-    )
-    cfg = _ensure_config(module_name)
-    deck_key = str(did)
-    if deck_key not in cfg["per_deck"]:
-        cfg["per_deck"][deck_key] = DEFAULT_DECK_META.copy()
-    cfg["per_deck"][deck_key].update(updates)
-    debug_log(f"Writing config using module name: {module_name}")
-    mw.addonManager.writeConfig(module_name, cfg)
-    debug_log("Config written successfully")
-
-
-def cleanup_missing_decks(module_name: str = __name__) -> None:
-    """Strip metadata entries for decks that no longer exist."""
-    cfg = mw.addonManager.getConfig(module_name) if mw else None
-    if not cfg or "per_deck" not in cfg or not mw or not mw.col:
+def save_config(cfg: Dict[str, Any]) -> None:
+    col = _collection()
+    if not col:
         return
-    per_deck = cfg["per_deck"]
+    normalized = _normalize_config(cfg)
+    setter = getattr(col, "set_config", None)
+    if callable(setter):
+        setter(CONFIG_KEY, normalized)
+    else:
+        col.conf[CONFIG_KEY] = normalized
+        col.setMod()
+
+
+def get_debug_mode() -> bool:
+    return load_config().get("debug_mode", False)
+
+
+def set_debug_mode(enabled: bool) -> None:
+    cfg = load_config()
+    cfg["debug_mode"] = bool(enabled)
+    save_config(cfg)
+
+
+def debug_log(message: str) -> None:
+    if get_debug_mode():
+        print(f"[CrAnki] {message}")
+
+
+def get_deck_meta(did: int, cfg: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    data = cfg if cfg is not None else load_config()
+    deck_key = str(did)
+    stored = data.get("per_deck", {}).get(deck_key)
+    base = DEFAULT_DECK_META.copy()
+    if isinstance(stored, dict):
+        base.update(stored)
+    return base
+
+
+def set_deck_meta(did: int, updates: Dict[str, Any]) -> None:
+    cfg = load_config()
+    per_deck = cfg.setdefault("per_deck", {})
+    deck_key = str(did)
+    if deck_key not in per_deck or not isinstance(per_deck[deck_key], dict):
+        per_deck[deck_key] = DEFAULT_DECK_META.copy()
+    per_deck[deck_key].update(updates)
+    debug_log(f"Updated deck {deck_key} with {updates}")
+    save_config(cfg)
+
+
+def cleanup_missing_decks() -> None:
+    col = _collection()
+    if not col:
+        return
+    cfg = load_config()
+    per_deck = cfg.get("per_deck", {})
     to_remove = []
-    for deck_key in list(per_deck.keys()):
+    for deck_key, value in list(per_deck.items()):
         try:
             did = int(deck_key)
-            if not mw.col.decks.get(did, default=False):
-                to_remove.append(deck_key)
-        except (ValueError, AttributeError):
+        except ValueError:
+            to_remove.append(deck_key)
+            continue
+        deck = col.decks.get(did, default=False)
+        if not deck:
             to_remove.append(deck_key)
     for deck_key in to_remove:
         del per_deck[deck_key]
     if to_remove:
         debug_log(f"Cleaning up missing decks: {to_remove}")
-        mw.addonManager.writeConfig(module_name, cfg)
+        save_config(cfg)

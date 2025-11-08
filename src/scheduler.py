@@ -7,14 +7,13 @@ from aqt import mw
 from aqt.qt import QTimer
 from aqt.utils import showWarning, tooltip
 
-from .config import get_deck_meta, set_deck_meta
-from .main import debug_log
+from .config import debug_log, get_deck_meta, load_config, set_deck_meta
 
 
 scheduler_timer: Optional[QTimer] = None
 
 
-def check_and_rebuild_decks(module_name: str = __name__) -> None:
+def check_and_rebuild_decks() -> None:
     """Check for decks that need rebuilding and handle updates."""
     if not mw or not mw.col:
         return
@@ -25,15 +24,12 @@ def check_and_rebuild_decks(module_name: str = __name__) -> None:
         current_date = now.strftime("%Y-%m-%d")
         debug_log(f"Scheduler check at {current_time}")
 
-        cfg = mw.addonManager.getConfig(module_name)
-        debug_log(f"Config loaded: {cfg}")
-
-        if not cfg or "per_deck" not in cfg:
-            debug_log("No config found or no per_deck key")
-            return
-
-        per_deck = cfg["per_deck"]
+        cfg = load_config()
+        per_deck = cfg.get("per_deck", {})
         debug_log(f"Checking {len(per_deck)} decks")
+
+        if not per_deck:
+            return
 
         for deck_key in per_deck.keys():
             try:
@@ -41,7 +37,7 @@ def check_and_rebuild_decks(module_name: str = __name__) -> None:
             except ValueError:
                 continue
 
-            meta = get_deck_meta(did, module_name=module_name, cfg=cfg)
+            meta = get_deck_meta(did, cfg=cfg)
             debug_log(
                 "Deck {deck_key}: enabled={enabled}, scheduled={time}, last_rebuild={last}".format(
                     deck_key=deck_key,
@@ -78,14 +74,15 @@ def check_and_rebuild_decks(module_name: str = __name__) -> None:
                     debug_log(f"Rebuild error: {exc}")
                     return False, str(exc)
 
-            def rebuild_done(future, target_did: int = did, target_name: str = deck_name):
+            def rebuild_done(
+                future, target_did: int = did, target_name: str = deck_name
+            ):
                 try:
                     success, error = future.result()
                     if success:
                         set_deck_meta(
                             target_did,
                             {"last_rebuild_date": current_date},
-                            module_name=module_name,
                         )
                         tooltip(f"\u2713 Rebuilt filtered deck: {target_name}")
                         if getattr(mw, "deckBrowser", None):
@@ -105,7 +102,7 @@ def check_and_rebuild_decks(module_name: str = __name__) -> None:
         debug_log(f"Error in check_and_rebuild_decks: {exc}")
 
 
-def start_scheduler(module_name: str = __name__) -> None:
+def start_scheduler() -> None:
     """Start the timer that periodically checks decks."""
     global scheduler_timer
     debug_log("Starting scheduler...")
@@ -116,15 +113,19 @@ def start_scheduler(module_name: str = __name__) -> None:
 
     now = datetime.now()
     seconds_until_next_minute = 60 - now.second
-    milliseconds_until_next_minute = seconds_until_next_minute * 1000 - now.microsecond // 1000
-    debug_log(f"Syncing to clock - will first check in {seconds_until_next_minute} seconds")
+    milliseconds_until_next_minute = (
+        seconds_until_next_minute * 1000 - now.microsecond // 1000
+    )
+    debug_log(
+        f"Syncing to clock - will first check in {seconds_until_next_minute} seconds"
+    )
 
     def start_regular_timer():
         global scheduler_timer
-        check_and_rebuild_decks(module_name=module_name)
+        check_and_rebuild_decks()
         scheduler_timer = QTimer()
         scheduler_timer.setInterval(60000)
-        scheduler_timer.timeout.connect(lambda: check_and_rebuild_decks(module_name=module_name))
+        scheduler_timer.timeout.connect(check_and_rebuild_decks)
         scheduler_timer.start()
 
     scheduler_timer = QTimer()

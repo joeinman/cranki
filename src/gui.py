@@ -14,16 +14,13 @@ from aqt.qt import (
     QWidget,
 )
 
-from .config import get_deck_meta, set_deck_meta
-from .main import debug_log
+from .config import debug_log, get_deck_meta, set_deck_meta
 
 
-def add_cranki_controls_to_dialog(
-    dialog, did: int, module_name: str = __name__
-) -> None:
+def add_cranki_controls_to_dialog(dialog, did: int) -> None:
     """Add controls for scheduling inside the filtered deck dialog."""
     try:
-        meta = get_deck_meta(did, module_name=module_name)
+        meta = get_deck_meta(did)
         debug_log(f"Creating UI controls for deck {did}")
 
         group_box = QGroupBox("Auto Rebuild")
@@ -67,11 +64,7 @@ def add_cranki_controls_to_dialog(
             time_label.setEnabled(bool(state))
             enabled = checkbox.isChecked()
             scheduled_time = time_edit.time().toString("HH:mm")
-            set_deck_meta(
-                did,
-                {"enabled": enabled, "scheduled_time": scheduled_time},
-                module_name=module_name,
-            )
+            set_deck_meta(did, {"enabled": enabled, "scheduled_time": scheduled_time})
             debug_log(f"Auto-saved on checkbox change: enabled={enabled}")
 
         def on_time_changed():
@@ -84,7 +77,6 @@ def add_cranki_controls_to_dialog(
                     "scheduled_time": scheduled_time,
                     "last_rebuild_date": "",
                 },
-                module_name=module_name,
             )
             debug_log(
                 f"Auto-saved on time change: time={scheduled_time}, cleared last rebuild date"
@@ -109,7 +101,7 @@ def add_cranki_controls_to_dialog(
         traceback.print_exc()
 
 
-def patch_filtered_deck_dialog(module_name: str = __name__) -> None:
+def patch_filtered_deck_dialog() -> None:
     """Patch the filtered deck dialog so it gets CrAnki controls."""
     _dialog_deck_ids = {}
 
@@ -144,13 +136,16 @@ def patch_filtered_deck_dialog(module_name: str = __name__) -> None:
         return
 
     try:
+
         def on_dialog_open(dialog_manager, dialog_name: str, dialog_instance):
             try:
                 if dialog_name != "FilteredDeckConfigDialog":
                     return
 
                 dialog = dialog_instance
-                debug_log(f"Detected filtered deck dialog (type: {type(dialog).__name__})")
+                debug_log(
+                    f"Detected filtered deck dialog (type: {type(dialog).__name__})"
+                )
                 did = _dialog_deck_ids.get(id(dialog))
 
                 if did is None:
@@ -171,9 +166,7 @@ def patch_filtered_deck_dialog(module_name: str = __name__) -> None:
 
                 def add_controls_delayed():
                     try:
-                        add_cranki_controls_to_dialog(
-                            dialog, did, module_name=module_name
-                        )
+                        add_cranki_controls_to_dialog(dialog, did)
                     except Exception as exc_inner:  # pragma: no cover
                         debug_log(f"Error adding controls delayed: {exc_inner}")
                         import traceback

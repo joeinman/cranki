@@ -3,19 +3,19 @@
 from aqt import mw
 from aqt.qt import QCheckBox, QDialog, QDialogButtonBox, QVBoxLayout
 
+from .config import get_debug_mode, set_debug_mode
+
 
 class ConfigDialog(QDialog):
     """Minimal dialog that toggles debug mode."""
 
-    def __init__(self, mw_instance, module_name: str):
+    def __init__(self, mw_instance):
         super().__init__(parent=mw_instance)
-        self._module_name = module_name
         self.setWindowTitle("CrAnki Configuration")
 
         self.layout = QVBoxLayout(self)
         self.debug_checkbox = QCheckBox("Enable debug mode")
-        cfg = mw.addonManager.getConfig(self._module_name) or {}
-        self.debug_checkbox.setChecked(cfg.get("debug_mode", False))
+        self.debug_checkbox.setChecked(get_debug_mode())
         self.layout.addWidget(self.debug_checkbox)
 
         buttons = QDialogButtonBox(
@@ -26,12 +26,12 @@ class ConfigDialog(QDialog):
         self.layout.addWidget(buttons)
 
     def _persist_and_accept(self) -> None:
-        cfg = mw.addonManager.getConfig(self._module_name) or {}
-        cfg["debug_mode"] = self.debug_checkbox.isChecked()
-        mw.addonManager.writeConfig(self._module_name, cfg)
+        set_debug_mode(self.debug_checkbox.isChecked())
         self.accept()
 
 
-def show_config_dialog(module_name: str) -> None:
-    dialog = ConfigDialog(mw, module_name)
+def show_config_dialog() -> None:
+    if not mw:
+        return
+    dialog = ConfigDialog(mw)
     dialog.exec()
