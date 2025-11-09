@@ -109,6 +109,98 @@ def add_cranki_controls_to_dialog(dialog, did: int) -> None:
         traceback.print_exc()
 
 
+def _capture_deck_id_from_attributes(self, deck_ids_dict):
+    """Helper to capture deck_id from dialog instance attributes."""
+    for attr in ["deck_id", "_deck_id", "did", "_did"]:
+        if hasattr(self, attr):
+            val = getattr(self, attr)
+            if isinstance(val, int) and val not in deck_ids_dict.values():
+                deck_ids_dict[id(self)] = val
+                debug_log(f"Captured deck_id from attribute {attr}: {val}")
+                break
+
+
+def _create_patched_init(original_init, deck_ids_dict):
+    """Create patched __init__ method for FilteredDeckConfigDialog."""
+
+    def patched_init(self, *args, **kwargs):
+        deck_id = kwargs.get("deck_id")
+        debug_log(f"__init__ called with args={args}, kwargs={kwargs}")
+        if deck_id is not None:
+            deck_ids_dict[id(self)] = deck_id
+            debug_log(f"Captured deck_id from kwargs: {deck_id}")
+        result = original_init(self, *args, **kwargs)
+        _capture_deck_id_from_attributes(self, deck_ids_dict)
+        return result
+    return patched_init
+
+
+def _find_single_filtered_deck():
+    """Find the single filtered deck if there's only one."""
+    if not mw.col:
+        debug_log("Collection not loaded")
+        return None
+    filtered_decks = []
+    for deck in mw.col.decks.all_names_and_ids():
+        deck_obj = mw.col.decks.get(DeckId(deck.id))
+        if deck_obj and deck_obj.get("dyn", False):
+            filtered_decks.append(deck.id)
+    if len(filtered_decks) == 1:
+        return filtered_decks[0]
+    debug_log("Unable to determine filtered deck")
+    return None
+
+
+def _is_valid_filtered_deck(did):
+    """Check if the given deck ID is a valid filtered deck."""
+    if not mw.col:
+        debug_log("Collection not loaded")
+        return False
+    deck = mw.col.decks.get(did, default=False)
+    return deck and deck.get("dyn", False)
+
+
+def _add_controls_with_delay(dialog, did):
+    """Add controls to dialog with error handling."""
+    def add_controls_delayed():
+        try:
+            add_cranki_controls_to_dialog(dialog, did)
+        except Exception as exc_inner:  # pragma: no cover
+            debug_log(f"Error adding controls delayed: {exc_inner}")
+            import traceback
+            traceback.print_exc()
+    QTimer.singleShot(100, add_controls_delayed)
+
+
+def _create_dialog_hook(deck_ids_dict):
+    """Create the dialog hook handler."""
+    def on_dialog_open(dialog_manager, dialog_name: str, dialog_instance):
+        try:
+            if dialog_name != "FilteredDeckConfigDialog":
+                return
+
+            dialog = dialog_instance
+            debug_log(
+                f"Detected filtered deck dialog (type: {type(dialog).__name__})")
+            did = deck_ids_dict.get(id(dialog))
+
+            if did is None:
+                did = _find_single_filtered_deck()
+                if did is None:
+                    return
+
+            if not _is_valid_filtered_deck(did):
+                return
+
+            _add_controls_with_delay(dialog, did)
+
+        except Exception as exc_inner:  # pragma: no cover - defensive
+            debug_log(f"Error in dialog hook: {exc_inner}")
+            import traceback
+            traceback.print_exc()
+    return on_dialog_open
+
+
 def patch_filtered_deck_dialog() -> None:
     """Patch the filtered deck dialog so it gets CrAnki controls."""
     _dialog_deck_ids = {}
@@ -116,89 +208,18 @@ def patch_filtered_deck_dialog() -> None:
     try:
         debug_log("Patching FilteredDeckConfigDialog.__init__")
         original_init = FilteredDeckConfigDialog.__init__
-
-        def patched_init(self, *args, **kwargs):
-            deck_id = kwargs.get("deck_id")
-            debug_log(f"__init__ called with args={args}, kwargs={kwargs}")
-            if deck_id is not None:
-                _dialog_deck_ids[id(self)] = deck_id
-                debug_log(f"Captured deck_id from kwargs: {deck_id}")
-            result = original_init(self, *args, **kwargs)
-            for attr in ["deck_id", "_deck_id", "did", "_did"]:
-                if hasattr(self, attr):
-                    val = getattr(self, attr)
-                    if isinstance(val, int) and val not in _dialog_deck_ids.values():
-                        _dialog_deck_ids[id(self)] = val
-                        debug_log(
-                            f"Captured deck_id from attribute {attr}: {val}")
-                        break
-            return result
-
-        FilteredDeckConfigDialog.__init__ = patched_init
+        FilteredDeckConfigDialog.__init__ = _create_patched_init(
+            original_init, _dialog_deck_ids)
         debug_log("Successfully patched FilteredDeckConfigDialog.__init__")
 
     except Exception as exc:  # pragma: no cover - defensive
         debug_log(f"Error patching __init__: {exc}")
         import traceback
-
         traceback.print_exc()
         return
 
     try:
-
-        def on_dialog_open(dialog_manager, dialog_name: str, dialog_instance):
-            try:
-                if dialog_name != "FilteredDeckConfigDialog":
-                    return
-
-                dialog = dialog_instance
-                debug_log(
-                    f"Detected filtered deck dialog (type: {type(dialog).__name__})"
-                )
-                did = _dialog_deck_ids.get(id(dialog))
-
-                if did is None:
-                    if not mw.col:
-                        debug_log("Collection not loaded")
-                        return
-                    filtered_decks = []
-                    for deck in mw.col.decks.all_names_and_ids():
-                        deck_obj = mw.col.decks.get(DeckId(deck.id))
-                        if deck_obj and deck_obj.get("dyn", False):
-                            filtered_decks.append(deck.id)
-                            filtered_decks.append(deck.id)
-                    if len(filtered_decks) == 1:
-                        did = filtered_decks[0]
-                    else:
-                        debug_log("Unable to determine filtered deck")
-                        return
-
-                if not mw.col:
-                    debug_log("Collection not loaded")
-                    return
-
-                deck = mw.col.decks.get(did, default=False)
-                if not deck or not deck.get("dyn", False):
-                    return
-
-                def add_controls_delayed():
-                    try:
-                        add_cranki_controls_to_dialog(dialog, did)
-                    except Exception as exc_inner:  # pragma: no cover
-                        debug_log(
-                            f"Error adding controls delayed: {exc_inner}")
-                        import traceback
-
-                        traceback.print_exc()
-
-                QTimer.singleShot(100, add_controls_delayed)
-
-            except Exception as exc_inner:  # pragma: no cover - defensive
-                debug_log(f"Error in dialog hook: {exc_inner}")
-                import traceback
-
-                traceback.print_exc()
-
+        on_dialog_open = _create_dialog_hook(_dialog_deck_ids)
         if hasattr(gui_hooks, "dialog_manager_did_open_dialog"):
             gui_hooks.dialog_manager_did_open_dialog.append(on_dialog_open)
             debug_log("Registered dialog hook (dialog_manager_did_open_dialog)")
@@ -208,5 +229,4 @@ def patch_filtered_deck_dialog() -> None:
     except Exception as exc:  # pragma: no cover - defensive
         debug_log(f"Failed to patch filtered deck dialog: {exc}")
         import traceback
-
         traceback.print_exc()
