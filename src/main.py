@@ -6,7 +6,7 @@ from aqt.qt import QAction
 from .config import cleanup_missing_decks, debug_log, get_debug_mode
 from .config_dialog import show_config_dialog
 from .gui import patch_filtered_deck_dialog
-from .scheduler import check_and_rebuild_decks, start_scheduler, stop_scheduler
+from .scheduler import start_scheduler, stop_scheduler
 
 
 ADDON_MODULE = __name__
@@ -39,10 +39,6 @@ def add_tools_menu_actions() -> None:
     global _tools_menu_added
     if _tools_menu_added or not mw:
         return
-
-    action = QAction("CrAnki: Test Scheduler Now", mw)
-    action.triggered.connect(check_and_rebuild_decks)
-    mw.form.menuTools.addAction(action)
 
     config_action = QAction("CrAnki: Configuration...", mw)
     config_action.triggered.connect(show_config_dialog)
