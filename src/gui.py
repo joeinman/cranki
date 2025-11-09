@@ -64,7 +64,8 @@ def add_cranki_controls_to_dialog(dialog, did: int) -> None:
             time_label.setEnabled(bool(state))
             enabled = checkbox.isChecked()
             scheduled_time = time_edit.time().toString("HH:mm")
-            set_deck_meta(did, {"enabled": enabled, "scheduled_time": scheduled_time})
+            set_deck_meta(did, {"enabled": enabled,
+                          "scheduled_time": scheduled_time})
             debug_log(f"Auto-saved on checkbox change: enabled={enabled}")
 
         def on_time_changed():
@@ -121,7 +122,8 @@ def patch_filtered_deck_dialog() -> None:
                     val = getattr(self, attr)
                     if isinstance(val, int) and val not in _dialog_deck_ids.values():
                         _dialog_deck_ids[id(self)] = val
-                        debug_log(f"Captured deck_id from attribute {attr}: {val}")
+                        debug_log(
+                            f"Captured deck_id from attribute {attr}: {val}")
                         break
             return result
 
@@ -168,7 +170,8 @@ def patch_filtered_deck_dialog() -> None:
                     try:
                         add_cranki_controls_to_dialog(dialog, did)
                     except Exception as exc_inner:  # pragma: no cover
-                        debug_log(f"Error adding controls delayed: {exc_inner}")
+                        debug_log(
+                            f"Error adding controls delayed: {exc_inner}")
                         import traceback
 
                         traceback.print_exc()

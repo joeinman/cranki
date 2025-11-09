@@ -7,7 +7,8 @@ from aqt import mw
 
 
 CONFIG_KEY = "cranki"
-ADDON_PACKAGE = __name__.split(".src.", 1)[0] if ".src." in __name__ else __name__
+ADDON_PACKAGE = __name__.split(
+    ".src.", 1)[0] if ".src." in __name__ else __name__
 
 DEFAULT_DECK_META: Dict[str, Any] = {
     "enabled": False,

@@ -11,7 +11,8 @@ from .scheduler import check_and_rebuild_decks, start_scheduler, stop_scheduler
 
 ADDON_MODULE = __name__
 ADDON_PACKAGE = (
-    ADDON_MODULE.split(".src.", 1)[0] if ".src." in ADDON_MODULE else ADDON_MODULE
+    ADDON_MODULE.split(".src.", 1)[
+        0] if ".src." in ADDON_MODULE else ADDON_MODULE
 )
 
 _tools_menu_added = False
