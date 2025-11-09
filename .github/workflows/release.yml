@@ -1,0 +1,31 @@
+name: Release Package
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  build-and-upload:
+    name: Package and Upload
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Package addon
+        id: package
+        env:
+          VERSION: ${{ github.event.release.tag_name }}
+        run: |
+          bash scripts/package.sh "$VERSION"
+          echo "package_path=dist/CrAnki-${VERSION}.ankiaddon" >> "$GITHUB_OUTPUT"
+
+      - name: Upload release asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ github.event.release.upload_url }}
+          asset_path: ${{ steps.package.outputs.package_path }}
+          asset_name: CrAnki-${{ github.event.release.tag_name }}.ankiaddon
+          asset_content_type: application/octet-stream
