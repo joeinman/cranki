@@ -23,7 +23,6 @@ zip -r -9 "$PACKAGE_PATH" \
     manifest.json \
     __init__.py \
     src/ \
-    config.json \
     README.md \
     LICENSE \
     -x "__pycache__/*" -x "src/__pycache__/*" > /dev/null
