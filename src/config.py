@@ -7,8 +7,6 @@ from aqt import mw
 
 
 CONFIG_KEY = "cranki"
-ADDON_PACKAGE = __name__.split(
-    ".src.", 1)[0] if ".src." in __name__ else __name__
 
 DEFAULT_DECK_META: Dict[str, Any] = {
     "enabled": False,
@@ -24,22 +22,6 @@ DEFAULT_CONFIG: Dict[str, Any] = {
 
 def _collection():
     return getattr(mw, "col", None)
-
-
-def _load_legacy_config() -> Optional[Dict[str, Any]]:
-    manager = getattr(mw, "addonManager", None)
-    if not manager:
-        return None
-    for key in {ADDON_PACKAGE, __name__}:
-        try:
-            data = manager.getConfig(key)
-            if data:
-                return data
-        except Exception:
-            continue
-    return None
-
-
 def _normalize_config(raw: Optional[Dict[str, Any]]) -> Dict[str, Any]:
     cfg = deepcopy(DEFAULT_CONFIG)
     if isinstance(raw, dict):
@@ -60,12 +42,6 @@ def load_config() -> Dict[str, Any]:
         return deepcopy(DEFAULT_CONFIG)
     getter = getattr(col, "get_config", None)
     raw = getter(CONFIG_KEY) if callable(getter) else col.conf.get(CONFIG_KEY)
-    if not isinstance(raw, dict) or not raw:
-        legacy = _load_legacy_config()
-        if legacy:
-            normalized = _normalize_config(legacy)
-            save_config(normalized)
-            return normalized
     return _normalize_config(raw)
 
 
