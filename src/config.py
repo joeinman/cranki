@@ -1,4 +1,10 @@
-"""Configuration helpers that use Anki's collection/profile storage."""
+# Copyright (c) 2025, Joe Inman
+#
+# Licensed under the MIT License.
+# You may obtain a copy of the License at:
+#     https://opensource.org/licenses/MIT
+#
+# This file is part of the CrAnki Addon for Anki.
 
 from copy import deepcopy
 from typing import Any, Dict, Optional
