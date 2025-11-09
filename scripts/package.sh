@@ -14,7 +14,7 @@ if [[ -z "$VERSION" ]]; then
     VERSION="$TIMESTAMP"
 fi
 
-PACKAGE_NAME="CrAnki-${VERSION}.ankiaddon"
+PACKAGE_NAME="cranki_${VERSION}.ankiaddon"
 PACKAGE_PATH="$DIST_DIR/$PACKAGE_NAME"
 
 pushd "$ROOT_DIR" >/dev/null
