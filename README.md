@@ -1,4 +1,6 @@
 # CrAnki
+
+![GitHub release (latest SemVer)](https://img.shields.io/github/v/release/joeinman/cranki?sort=semver)
 Automate rebuilding your Anki filtered decks.
 
 ## How to Use
