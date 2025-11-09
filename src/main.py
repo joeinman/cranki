@@ -37,8 +37,6 @@ def announce_startup() -> None:
         print("Version: 1.0")
         print("Debug mode: ENABLED")
         print("=" * 60)
-    else:
-        print("CrAnki: Addon loaded (enable debug via Tools > CrAnki > Configuration)")
 
 
 def add_tools_menu_actions() -> None:

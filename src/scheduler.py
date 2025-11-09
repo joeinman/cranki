@@ -7,8 +7,9 @@
 # This file is part of the CrAnki Addon for Anki.
 
 from datetime import datetime
-from typing import Optional
+from typing import Optional, cast
 
+from anki.decks import DeckId
 from aqt import mw
 from aqt.qt import QTimer
 from aqt.utils import showWarning, tooltip
@@ -61,11 +62,10 @@ def check_and_rebuild_decks() -> None:
 
             if last_rebuild_date == current_date:
                 continue
-
             if current_time < scheduled_time:
                 continue
 
-            deck = mw.col.decks.get(did, default=False)
+            deck = mw.col.decks.get(cast(DeckId, did), default=False)
             if not deck or not deck.get("dyn", False):
                 continue
 
@@ -74,7 +74,10 @@ def check_and_rebuild_decks() -> None:
 
             def rebuild_worker(target_did: int = did):
                 try:
-                    mw.col.sched.rebuild_filtered_deck(target_did)
+                    if not mw or not mw.col:
+                        return False, "Collection not available"
+                    mw.col.sched.rebuild_filtered_deck(
+                        cast(DeckId, target_did))
                     return True, None
                 except Exception as exc:  # pragma: no cover - defensive
                     debug_log(f"Rebuild error: {exc}")

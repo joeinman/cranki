@@ -6,6 +6,7 @@
 #
 # This file is part of the CrAnki Addon for Anki.
 
+from anki.decks import DeckId
 from aqt import gui_hooks, mw
 from aqt.filtered_deck import FilteredDeckConfigDialog
 from aqt.qt import (
@@ -157,16 +158,24 @@ def patch_filtered_deck_dialog() -> None:
                 did = _dialog_deck_ids.get(id(dialog))
 
                 if did is None:
+                    if not mw.col:
+                        debug_log("Collection not loaded")
+                        return
                     filtered_decks = []
                     for deck in mw.col.decks.all_names_and_ids():
-                        deck_obj = mw.col.decks.get(deck.id)
-                        if deck_obj.get("dyn", False):
+                        deck_obj = mw.col.decks.get(DeckId(deck.id))
+                        if deck_obj and deck_obj.get("dyn", False):
+                            filtered_decks.append(deck.id)
                             filtered_decks.append(deck.id)
                     if len(filtered_decks) == 1:
                         did = filtered_decks[0]
                     else:
                         debug_log("Unable to determine filtered deck")
                         return
+
+                if not mw.col:
+                    debug_log("Collection not loaded")
+                    return
 
                 deck = mw.col.decks.get(did, default=False)
                 if not deck or not deck.get("dyn", False):

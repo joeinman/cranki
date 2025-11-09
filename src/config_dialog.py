@@ -19,17 +19,17 @@ class ConfigDialog(QDialog):
         super().__init__(parent=mw_instance)
         self.setWindowTitle("CrAnki Configuration")
 
-        self.layout = QVBoxLayout(self)
+        layout = QVBoxLayout(self)
         self.debug_checkbox = QCheckBox("Enable debug mode")
         self.debug_checkbox.setChecked(get_debug_mode())
-        self.layout.addWidget(self.debug_checkbox)
+        layout.addWidget(self.debug_checkbox)
 
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
         )
         buttons.accepted.connect(self._persist_and_accept)
         buttons.rejected.connect(self.reject)
-        self.layout.addWidget(buttons)
+        layout.addWidget(buttons)
 
     def _persist_and_accept(self) -> None:
         set_debug_mode(self.debug_checkbox.isChecked())

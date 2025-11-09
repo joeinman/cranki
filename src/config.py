@@ -28,6 +28,8 @@ DEFAULT_CONFIG: Dict[str, Any] = {
 
 def _collection():
     return getattr(mw, "col", None)
+
+
 def _normalize_config(raw: Optional[Dict[str, Any]]) -> Dict[str, Any]:
     cfg = deepcopy(DEFAULT_CONFIG)
     if isinstance(raw, dict):
@@ -48,7 +50,7 @@ def load_config() -> Dict[str, Any]:
         return deepcopy(DEFAULT_CONFIG)
     getter = getattr(col, "get_config", None)
     raw = getter(CONFIG_KEY) if callable(getter) else col.conf.get(CONFIG_KEY)
-    return _normalize_config(raw)
+    return _normalize_config(raw if isinstance(raw, (dict, type(None))) else None)
 
 
 def save_config(cfg: Dict[str, Any]) -> None:
@@ -107,7 +109,7 @@ def cleanup_missing_decks() -> None:
     cfg = load_config()
     per_deck = cfg.get("per_deck", {})
     to_remove = []
-    for deck_key, value in list(per_deck.items()):
+    for deck_key, value in per_deck.items():
         try:
             did = int(deck_key)
         except ValueError:
