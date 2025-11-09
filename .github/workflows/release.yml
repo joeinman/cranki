@@ -20,7 +20,7 @@ jobs:
           VERSION: ${{ github.event.release.tag_name }}
         run: |
           bash scripts/package.sh "$VERSION"
-          echo "package_path=dist/CrAnki-${VERSION}.ankiaddon" >> "$GITHUB_OUTPUT"
+          echo "package_path=dist/cranki_${VERSION}.ankiaddon" >> "$GITHUB_OUTPUT"
 
       - name: Upload release asset
         uses: softprops/action-gh-release@v1
